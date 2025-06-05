@@ -1,7 +1,8 @@
 package com.example.BatteryManagement;
 
+import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface BatteryRepository {
+public interface BatteryRepository extends JpaRepository<Battery,Long> {
 }
