@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 
 public class Battery {
 
+    private String charging;
+
     private String PriceArea;
 
     private double pricePerKwh;
@@ -13,11 +15,16 @@ public class Battery {
     public Battery() {
     }
 
-    public Battery(String priceArea, double pricePerKwh, LocalDateTime timestamp) {
+    public Battery(String priceArea, double pricePerKwh, LocalDateTime timestamp, String charging) {
         PriceArea = priceArea;
         this.pricePerKwh = pricePerKwh;
         this.timestamp = timestamp;
+        this.charging = charging;
     }
+
+    public Battery(String on) {
+    }
+
     public String getPriceArea() {
         return PriceArea;
     }
@@ -36,6 +43,12 @@ public class Battery {
     public void setTimestamp(LocalDateTime timestamp) {
         this.timestamp = timestamp;
     }
+    public String getCharging() {
+        return charging;
+    }
+    public void setCharging(String charging) {
+        this.charging = charging;
+    }
 
     @Override
     public String toString() {
@@ -43,6 +56,7 @@ public class Battery {
                 "PriceArea='" + PriceArea + '\'' +
                 ", pricePerKwh=" + pricePerKwh +
                 ", timestamp=" + timestamp +
+                ", charging='" + charging + '\'' +
                 '}';
     }
 }
