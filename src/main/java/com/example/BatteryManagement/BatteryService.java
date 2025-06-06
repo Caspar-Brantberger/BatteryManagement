@@ -11,8 +11,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.sql.SQLOutput;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 public class BatteryService {
@@ -91,4 +93,128 @@ public class BatteryService {
     }
 
 
+    public void runOptimizedChargingCycle() {
+        try {
+
+            List<Double> allHourlyPrices = getEnergyPricesFor24Hours();
+            List<Double> allHourlyConsumption = getHouseHoldConsumptionFor24Hours();
+            logInitialInfo(allHourlyPrices, allHourlyConsumption);
+
+            while (true) {
+                BatteryInfoResponseDTO currentInfo = getBatteryInfo();
+
+                boolean shouldCharge = determineChargingDecision(currentInfo, allHourlyPrices, allHourlyConsumption);
+
+                executeChargingCommand(shouldCharge, currentInfo.isEvBatteryChargeStartStop());
+
+                logCurrentStatus(currentInfo, shouldCharge);
+                Thread.sleep(4000);
+            }
+        } catch (InterruptedException e) {
+            System.err.println("Optimization cycle interrupted: " + e.getMessage());
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            System.err.println("An unexpected error occurred: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+
+    private boolean determineChargingDecision(
+            BatteryInfoResponseDTO currentInfo,
+            List<Double> allHourlyPrices,
+            List<Double> allHourlyConsumption) {
+
+        double currentBatteryPercent = currentInfo.getBatteryPercentage();
+        boolean isChargingCurrently = currentInfo.isEvBatteryChargeStartStop();
+        double currentBaseLoad = currentInfo.getBasecurrentLoad();
+        int currentSimHour = currentInfo.getSimTimeHour();
+        double totalPotentialLoadIfCharging = currentBaseLoad + CHARGING_POWER_KW;
+
+
+        if (currentBatteryPercent >= BATTERY_CHARGE_THRESHOLD_HIGH) {
+            System.out.println("Battery level over " + BATTERY_CHARGE_THRESHOLD_HIGH + "%. Stops charging.");
+            return false;
+        }
+        if (totalPotentialLoadIfCharging > MAX_TOTAL_LOAD_KW) {
+            if (isChargingCurrently) {
+                System.out.println("Total load over " + MAX_TOTAL_LOAD_KW + "kW. Stops charging.");
+            }
+            return false;
+        }
+
+
+        if (currentBatteryPercent < BATTERY_CHARGE_THRESHOLD_LOW) {
+            System.out.println("Battery level below " + BATTERY_CHARGE_THRESHOLD_LOW + "%. Considering charging...");
+
+            Optional<Integer> optimalHour = findOptimalChargingHour(allHourlyPrices, allHourlyConsumption);
+
+
+            if (optimalHour.isPresent() && optimalHour.get() == currentSimHour) {
+                return true;
+            } else {
+                System.out.println("Current hour (" + String.format("%02d:00", currentSimHour) + ") is not optimal. Optimal is " + (optimalHour.isPresent() ? String.format("%02d:00", optimalHour.get()) : "none found") + ". Waiting.");
+                return false;
+            }
+        }
+
+
+        return isChargingCurrently;
+    }
+
+
+    private void executeChargingCommand(boolean shouldCharge, boolean isChargingCurrently) {
+        if (shouldCharge && !isChargingCurrently) {
+            ChargeResponseDTO response = startCharging();
+            System.out.println("COMMAND EXECUTE: STARTING CHARGING! Status: " + response.getCharging());
+        } else if (!shouldCharge && isChargingCurrently) {
+            ChargeResponseDTO response = stopCharging();
+            System.out.println("COMMAND EXECUTE: STOPPING CHARGING! Status: " + response.getCharging());
+        }
+    }
+
+
+    private Optional<Integer> findOptimalChargingHour(List<Double> allHourlyPrices, List<Double> allHourlyConsumption) {
+        int bestHour = -1;
+        double minScore = Double.MAX_VALUE;
+
+        for (int i = 0; i < 24; i++) {
+            double currentHourConsumption = allHourlyConsumption.get(i);
+            double currentHourPrice = allHourlyPrices.get(i);
+            double totalLoadWithCharging = currentHourConsumption + CHARGING_POWER_KW;
+
+            if (totalLoadWithCharging <= MAX_TOTAL_LOAD_KW) {
+                double currentScore = currentHourPrice;
+
+                if (currentScore < minScore) {
+                    minScore = currentScore;
+                    bestHour = i;
+                }
+            }
+        }
+        return bestHour != -1 ? Optional.of(bestHour) : Optional.empty();
+    }
+
+
+    private void logInitialInfo(List<Double> prices, List<Double> consumption) {
+        System.out.println("--------------------------------------------------");
+        System.out.println("Optimized charging cycle started");
+        System.out.println("Electricity prices (Öre/kWh): " + prices);
+        System.out.println("Base consumption (kW): " + consumption);
+        System.out.println("--------------------------------------------------");
+    }
+
+    private void logCurrentStatus(BatteryInfoResponseDTO currentInfo, boolean currentDecisionToCharge) {
+        double currentBatteryPercent = currentInfo.getBatteryPercentage();
+        double currentBaseLoad = currentInfo.getBasecurrentLoad();
+        double totalPotentialLoad = currentBaseLoad + CHARGING_POWER_KW;
+
+        System.out.println("\n--- Current Simulated Time: " + String.format("%02d:%02d", currentInfo.getSimTimeHour(), currentInfo.getSimTimeMin()) + " ---");
+        System.out.println("Battery level: " + String.format("%.2f", currentBatteryPercent) + "%");
+        System.out.println("Household base load: " + String.format("%.2f", currentBaseLoad) + " kW");
+        System.out.println("Potential total load (incl. charging): " + String.format("%.2f", totalPotentialLoad) + " kW (Max " + MAX_TOTAL_LOAD_KW + " kW)");
+        System.out.println("Decision: " + (currentDecisionToCharge ? "CHARGING ON" : "CHARGING OFF"));
+        System.out.println("--------------------------------------------------");
+    }
 }
+
