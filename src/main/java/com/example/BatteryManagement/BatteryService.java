@@ -1,5 +1,8 @@
 package com.example.BatteryManagement;
 
+import DTO.BatteryInfoResponseDTO;
+import DTO.ChargeRequestDTO;
+import DTO.ChargeResponseDTO;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
@@ -17,7 +20,6 @@ public class BatteryService {
     private RestTemplate restTemplate;
     private final String chargingStationUrl;
 
-    private static final double EV_BATT_MAX_CAPACITY_KWH = 46.3;
     private static final double CHARGING_POWER_KW = 7.4;
     private static final double MAX_TOTAL_LOAD_KW = 11.0;
     private static final double BATTERY_CHARGE_THRESHOLD_LOW = 20.0;
@@ -31,61 +33,62 @@ public class BatteryService {
     }
 
     //För att starta laddningen
-    public Battery startCharging() {
-        String url = chargingStationUrl + "/charging";
-        Battery requestBody = new Battery("on");
-        HttpEntity<Battery> request = new HttpEntity<>(requestBody);
-        ResponseEntity<Battery> response = restTemplate.exchange
-                (url, HttpMethod.POST, request, Battery.class);
-        return response.getBody();
+    public ChargeResponseDTO startCharging() {
+        String url = chargingStationUrl + "/charge";
+        ChargeRequestDTO requestBody = new ChargeRequestDTO("on");
+        HttpEntity<ChargeRequestDTO> requestEntity = new HttpEntity<>(requestBody);
+        ResponseEntity<ChargeResponseDTO> response = restTemplate.exchange(
+                url, HttpMethod.POST, requestEntity, ChargeResponseDTO.class);
+        return Objects.requireNonNull(response.getBody());
+
     }
     //Ett post anropp till /discharge endpointen för att resetta batteriet
-    public Battery resetBatteryToDefault(){
+    public ChargeResponseDTO resetBatteryToDefault(){
         String url = chargingStationUrl + "/discharge";
-        Battery requestBody = new Battery("on");
-        HttpEntity<Battery> request = new HttpEntity<>(requestBody);
-
-
-        ResponseEntity<Battery> response = restTemplate.exchange( // Ändra till ChargeResponseDTO.class
+        ChargeRequestDTO requestBody = new ChargeRequestDTO("on");
+        HttpEntity<ChargeRequestDTO> requestEntity = new HttpEntity<>(requestBody);
+        ResponseEntity<ChargeResponseDTO> response = restTemplate.exchange(
                 url,
                 HttpMethod.POST,
-                request,
-                Battery.class);
+                requestEntity,
+                ChargeResponseDTO.class
+        );
         return Objects.requireNonNull(response.getBody());
+
     }
 
 
     //Get för att hämta batteriinfo anrop till /info endpointen
-    public Battery getBatteryInfo(){
+    public BatteryInfoResponseDTO getBatteryInfo(){
         String url = chargingStationUrl + "/info";
-        return restTemplate.getForObject(url, Battery.class);
+        return restTemplate.getForObject(url, BatteryInfoResponseDTO.class);
     }
     //Stoppar laddningen med ett POST anropp till /charging endpointen
-    public Battery stopCharging() {
+    public ChargeResponseDTO stopCharging() {
         String url = chargingStationUrl + "/charging";
-        Battery requestBody = new Battery("off");
-        HttpEntity<Battery> request = new HttpEntity<>(requestBody);
-
-        ResponseEntity<Battery> response = restTemplate.exchange(
-                url,
-                HttpMethod.POST,
-                request,
-                Battery.class
-        );
+        ChargeRequestDTO requestBody = new ChargeRequestDTO("off");
+        HttpEntity<ChargeRequestDTO> requestEntity = new HttpEntity<>(requestBody);
+        ResponseEntity<ChargeResponseDTO> response = restTemplate.exchange(
+                url, HttpMethod.POST, requestEntity, ChargeResponseDTO.class);
         return Objects.requireNonNull(response.getBody());
+
     }
 
     //Get anrop till /consumption endpointen
     public List<Double> getHouseHoldConsumptionFor24Hours() {
-        String url = chargingStationUrl + "/priceperhour";
+        String url = chargingStationUrl + "/baseload";
         ResponseEntity<List<Double>> response = restTemplate.exchange(
                 url,
                 HttpMethod.GET,null, new ParameterizedTypeReference<List<Double>>(){}
         );
         return Objects.requireNonNull(response.getBody());
     }
-    public double getEvMaxBatteryCapacity(){
-        return EV_BATT_MAX_CAPACITY_KWH;
+    public List<Double> getEnergyPricesFor24Hours() {
+        String url = chargingStationUrl + "/priceperhour";
+        ResponseEntity<List<Double>> response = restTemplate.exchange(
+                url, HttpMethod.GET, null, new ParameterizedTypeReference<List<Double>>() {});
+        return Objects.requireNonNull(response.getBody());
     }
+
 
 }
