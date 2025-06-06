@@ -11,6 +11,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 public class BatteryService {
@@ -19,6 +20,11 @@ public class BatteryService {
     private final String chargingStationUrl;
 
     private static final double EV_BATT_MAX_CAPACITY_KWH = 46.3;
+    private static final double CHARGING_POWER_KW = 7.4;
+    private static final double MAX_TOTAL_LOAD_KW = 11.0;
+    private static final double BATTERY_CHARGE_THRESHOLD_LOW = 20.0;
+    private static final double BATTERY_CHARGE_THRESHOLD_HIGH = 80.0;
+
 
     public BatteryService(RestTemplate restTemplate,
                           @Value("${chargingStationUrl}") String chargingStationUrl) {
@@ -72,36 +78,17 @@ public class BatteryService {
     }
 
     //Get anrop till /consumption endpointen
-    public List<Double> getHouseHoldConsumptionFor24Hours(){
-     String url = chargingStationUrl + "/consumption";
-     ResponseEntity<List<Double>> response = restTemplate.exchange(
-             url,HttpMethod.GET,null,new ParameterizedTypeReference<List<Double>>(){}
-     );
-     return Objects.requireNonNull(response.getBody());
-    }
-
-    //Get anropp /priceperhour endpointen
-    public List<Double> getEnergyPricesFor24Hours(){
+    public List<Double> getHouseHoldConsumptionFor24Hours() {
         String url = chargingStationUrl + "/priceperhour";
         ResponseEntity<List<Double>> response = restTemplate.exchange(
                 url,
                 HttpMethod.GET,null, new ParameterizedTypeReference<List<Double>>(){}
         );
         return Objects.requireNonNull(response.getBody());
-
     }
-
     public double getEvMaxBatteryCapacity(){
         return EV_BATT_MAX_CAPACITY_KWH;
     }
-
-    public void runOptimiziedCharchingCycle(){
-
-
-    }
-
-
-
 
 
 }
