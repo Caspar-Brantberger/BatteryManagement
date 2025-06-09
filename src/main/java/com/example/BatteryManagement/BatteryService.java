@@ -12,9 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.sql.SQLOutput;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class BatteryService {
@@ -23,9 +22,12 @@ public class BatteryService {
     private final String chargingStationUrl;
 
     private static final double CHARGING_POWER_KW = 7.4;
-    private static final double MAX_TOTAL_LOAD_KW = 11.0;
+    private static final double MAX_TOTAL_LOAD_KW = 11.5;
     private static final double BATTERY_CHARGE_THRESHOLD_LOW = 20.0;
     private static final double BATTERY_CHARGE_THRESHOLD_HIGH = 80.0;
+
+    private static final int NUMBER_OF_OPTIMAL_HOURS = 4;
+    private boolean optimizeByPriceStrategy = false;// False = Lägsta hushållsförbrukning , true = lägsta elpris
 
 
     public BatteryService(RestTemplate restTemplate,
@@ -138,52 +140,70 @@ public class BatteryService {
         int currentSimHour = currentInfo.getSimTimeHour();
         double totalPotentialLoadIfCharging = currentBaseLoad + CHARGING_POWER_KW;
 
+        System.out.println("determineChargingDecision called with:");
+        System.out.println("  batteryPercent=" + currentBatteryPercent);
+        System.out.println("  isChargingCurrently=" + isChargingCurrently);
+        System.out.println("  currentBaseLoad=" + currentBaseLoad);
+        System.out.println("  totalPotentialLoadIfCharging=" + totalPotentialLoadIfCharging);
+        System.out.println("  currentSimHour=" + currentSimHour);
 
         if (currentBatteryPercent >= BATTERY_CHARGE_THRESHOLD_HIGH) {
             System.out.println("Battery level over " + BATTERY_CHARGE_THRESHOLD_HIGH + "%. Stops charging.");
-            return false;
+            return false; // Stoppa laddningen
         }
+
         if (totalPotentialLoadIfCharging > MAX_TOTAL_LOAD_KW) {
+            System.out.println("Total load over " + MAX_TOTAL_LOAD_KW + "kW. Stops charging.");
+            return false; // Stoppa laddningen
+        }
+
+
+        List<Integer> optimalHours = findOptimalChargingHours(
+                allHourlyPrices, allHourlyConsumption, optimizeByPriceStrategy, NUMBER_OF_OPTIMAL_HOURS);
+
+
+        if (optimalHours.contains(currentSimHour)) {
+
+            if (!isChargingCurrently) {
+                System.out.println("Optimal hour and conditions met. STARTING CHARGING!");
+            }
+            return true;
+        } else {
+
             if (isChargingCurrently) {
-                System.out.println("Total load over " + MAX_TOTAL_LOAD_KW + "kW. Stops charging.");
+                System.out.println("Not optimal hour. STOPPING CHARGING if currently on.");
+            } else {
+                System.out.println("Not optimal hour. Not starting charging.");
             }
             return false;
         }
-
-
-        if (currentBatteryPercent < BATTERY_CHARGE_THRESHOLD_LOW) {
-            System.out.println("Battery level below " + BATTERY_CHARGE_THRESHOLD_LOW + "%. Considering charging...");
-
-            Optional<Integer> optimalHour = findOptimalChargingHour(allHourlyPrices, allHourlyConsumption);
-
-
-            if (optimalHour.isPresent() && optimalHour.get() == currentSimHour) {
-                return true;
-            } else {
-                System.out.println("Current hour (" + String.format("%02d:00", currentSimHour) + ") is not optimal. Optimal is " + (optimalHour.isPresent() ? String.format("%02d:00", optimalHour.get()) : "none found") + ". Waiting.");
-                return false;
-            }
-        }
-
-
-        return isChargingCurrently;
     }
 
 
     private void executeChargingCommand(boolean shouldCharge, boolean isChargingCurrently) {
+        System.out.println("executeChargingCommand called with shouldCharge=" + shouldCharge + ", isChargingCurrently=" + isChargingCurrently);
+
         if (shouldCharge && !isChargingCurrently) {
             ChargeResponseDTO response = startCharging();
             System.out.println("COMMAND EXECUTE: STARTING CHARGING! Status: " + response.getCharging());
+
         } else if (!shouldCharge && isChargingCurrently) {
             ChargeResponseDTO response = stopCharging();
             System.out.println("COMMAND EXECUTE: STOPPING CHARGING! Status: " + response.getCharging());
+        } else {
+            System.out.println("No change in charging state needed");
         }
     }
 
 
-    private Optional<Integer> findOptimalChargingHour(List<Double> allHourlyPrices, List<Double> allHourlyConsumption) {
-        int bestHour = -1;
-        double minScore = Double.MAX_VALUE;
+    private List<Integer> findOptimalChargingHours(
+            List<Double> allHourlyPrices,
+            List<Double> allHourlyConsumption,
+            boolean optimizeByPrice,
+            int numberOfBestHours
+    ) {
+
+        List<Map.Entry<Integer, Double>> hourlyScores = new ArrayList<>();
 
         for (int i = 0; i < 24; i++) {
             double currentHourConsumption = allHourlyConsumption.get(i);
@@ -191,15 +211,18 @@ public class BatteryService {
             double totalLoadWithCharging = currentHourConsumption + CHARGING_POWER_KW;
 
             if (totalLoadWithCharging <= MAX_TOTAL_LOAD_KW) {
-                double currentScore = currentHourPrice;
-
-                if (currentScore < minScore) {
-                    minScore = currentScore;
-                    bestHour = i;
-                }
+                double score = optimizeByPrice ? currentHourPrice : currentHourConsumption; // Välj score baserat på optimeringsstrategi
+                hourlyScores.add(new AbstractMap.SimpleEntry<>(i, score));
             }
         }
-        return bestHour != -1 ? Optional.of(bestHour) : Optional.empty();
+
+
+        hourlyScores.sort(Comparator.comparingDouble(Map.Entry::getValue));
+
+        return hourlyScores.stream()
+                .limit(numberOfBestHours)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
     }
 
 
