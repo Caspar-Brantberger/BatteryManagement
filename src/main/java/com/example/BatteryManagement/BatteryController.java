@@ -17,7 +17,7 @@ public class BatteryController {
         this.batteryService = batteryService;
     }
 
-    @GetMapping("/start-optimaztion")
+    @GetMapping("/start-optimization")
     public String startOpimization() {
         new Thread(()-> batteryService.runOptimizedChargingCycle()).start();
         return "Battery optimization started.";

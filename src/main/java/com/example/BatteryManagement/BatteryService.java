@@ -29,7 +29,7 @@ public class BatteryService {
 
 
     public BatteryService(RestTemplate restTemplate,
-                          @Value("${chargingStationUrl}") String chargingStationUrl) {
+                          @Value("${charging.station.url}") String chargingStationUrl) {
         this.restTemplate = restTemplate;
         this.chargingStationUrl = chargingStationUrl;
     }
@@ -37,7 +37,9 @@ public class BatteryService {
     //För att starta laddningen
     public ChargeResponseDTO startCharging() {
         String url = chargingStationUrl + "/charge";
-        ChargeRequestDTO requestBody = new ChargeRequestDTO("on");
+        ChargeRequestDTO requestBody = new ChargeRequestDTO();
+        requestBody.setCharging("on");
+
         HttpEntity<ChargeRequestDTO> requestEntity = new HttpEntity<>(requestBody);
         ResponseEntity<ChargeResponseDTO> response = restTemplate.exchange(
                 url, HttpMethod.POST, requestEntity, ChargeResponseDTO.class);
@@ -47,7 +49,9 @@ public class BatteryService {
     //Ett post anropp till /discharge endpointen för att resetta batteriet
     public ChargeResponseDTO resetBatteryToDefault(){
         String url = chargingStationUrl + "/discharge";
-        ChargeRequestDTO requestBody = new ChargeRequestDTO("on");
+        ChargeRequestDTO requestBody = new ChargeRequestDTO();
+        requestBody.setDischarging("on");
+
         HttpEntity<ChargeRequestDTO> requestEntity = new HttpEntity<>(requestBody);
         ResponseEntity<ChargeResponseDTO> response = restTemplate.exchange(
                 url,
@@ -63,12 +67,15 @@ public class BatteryService {
     //Get för att hämta batteriinfo anrop till /info endpointen
     public BatteryInfoResponseDTO getBatteryInfo(){
         String url = chargingStationUrl + "/info";
+        System.out.println("DEBUG: Anropar URL: " + url);
         return restTemplate.getForObject(url, BatteryInfoResponseDTO.class);
     }
     //Stoppar laddningen med ett POST anropp till /charging endpointen
     public ChargeResponseDTO stopCharging() {
-        String url = chargingStationUrl + "/charging";
-        ChargeRequestDTO requestBody = new ChargeRequestDTO("off");
+        String url = chargingStationUrl + "/charge";
+        ChargeRequestDTO requestBody = new ChargeRequestDTO();
+        requestBody.setCharging("off");
+
         HttpEntity<ChargeRequestDTO> requestEntity = new HttpEntity<>(requestBody);
         ResponseEntity<ChargeResponseDTO> response = restTemplate.exchange(
                 url, HttpMethod.POST, requestEntity, ChargeResponseDTO.class);
